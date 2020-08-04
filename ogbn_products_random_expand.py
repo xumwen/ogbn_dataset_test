@@ -75,7 +75,7 @@ if __name__ == '__main__':
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     # load data
-    root = osp.join(osp.dirname(osp.realpath(__file__)), '..', 'data', 'products')
+    root = osp.join(osp.dirname(osp.realpath(__file__)), 'data', 'products')
     dataset = PygNodePropPredDataset('ogbn-products', root)
     split_idx = dataset.get_idx_split()
     evaluator = Evaluator(name='ogbn-products')
