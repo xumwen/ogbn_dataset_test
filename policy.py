@@ -20,7 +20,7 @@ sigma = 1
 
 class Memory:
     def __init__(self):
-        self.state = None
+        self.states = []
         self.actions = []
         self.logprobs = []
         self.rewards = []
@@ -34,8 +34,9 @@ class Memory:
 
 class Policy(nn.Module):
     def __init__(self, state_size, out_channels):
-        super(ActorCritic, self).__init__()
+        super(Policy, self).__init__()
         self.state_size = state_size
+        self.out_channels = out_channels
         self.build_actor()
 
     def build_actor(self):
@@ -45,44 +46,50 @@ class Policy(nn.Module):
             nn.Linear(64, 32),
             nn.LeakyReLU()
         )
-        self.action_mean = nn.Linear(32, out_channels)
+        self.action_mean = nn.Linear(32, self.out_channels)
     
     def forward(self, state):
         act_hid = self.actor(state)
         action_mean = self.action_mean(act_hid)
         action_std = sigma
 
-        #TODO:sample from n Normal and calculate sum of log_prob
-        normal = Normal(action_mean, action_std)
-        action = normal.sample()
-        logprob = normal.log_prob(action)
+        # sample from n Normal and calculate sum of log_prob
+        actions = torch.zeros(self.out_channels)
+        log_prob = 0.0
+        for i in range(self.out_channels):
+            normal = Normal(action_mean[i], action_std)
+            action = normal.sample()
 
-        return action.item(), logprob.item()
+            log_prob += normal.log_prob(action)
+            actions[i] = action
+
+        return actions, log_prob.item()
 
     def evaluate(self, state, action):
         act_hid = self.actor(state)
         action_mean = self.action_mean(act_hid)
         action_std = sigma
 
-        #TODO:multi-action and single state
-        normal = Normal(action_mean, action_std)
-        log_prob = normal.log_prob(action)
+        log_prob = 0.0
+        for i in range(self.out_channels):
+            normal = Normal(action_mean[i], action_std)
+            log_prob += normal.log_prob(action[i])
 
-        # entropy = normal.entropy()
+            # entropy += normal.entropy()
 
-        return log_prob
+        return log_prob.item()
 
 
 class PPO:
-    def __init__(self, state_size, device):
-        self.policy = Policy(state_size)
+    def __init__(self, state_size, out_channels, device):
+        self.policy = Policy(state_size, out_channels)
         self.optimizer = optim.Adam(self.policy.parameters(), lr=1e-3)
 
         self.memory = Memory()
         self.device = device
 
     def make_batch(self):
-        s = torch.FloatTensor(self.memory.states).to(self.device)
+        s = torch.stack(self.memory.states).to(self.device)
         a = torch.stack(self.memory.actions).to(self.device)
         logp = torch.FloatTensor(self.memory.logprobs).to(self.device).unsqueeze(dim=1)
         r = torch.FloatTensor(self.memory.rewards).to(self.device).unsqueeze(dim=1)
@@ -119,12 +126,13 @@ class PPO:
         self.policy.cpu()
 
     def train_step(self, env):
-        self.memory.state = env.get_state()
-        
-        for eid in range(nb_episodes):
-            a, logp = self.policy.action(s)
-            r = env.eval(a)
+        s = env.get_state()
 
+        for eid in range(nb_episodes):
+            a, logp = self.policy(s)
+            r = env.step(a, eid)
+
+            self.memory.states.append(s)
             self.memory.actions.append(a)
             self.memory.logprobs.append(logp)
             self.memory.rewards.append(r)

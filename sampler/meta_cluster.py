@@ -27,8 +27,8 @@ class MetaClusterSampler(object):
         self.num_parts = num_parts
         self.shuffle = shuffle
 
+    def reset(self):
         self.subgraphs = []
-        self.__meta_cluster__()
 
     def __produce_subgraph_by_nodes__(self, n_id):
         row, col = self.edge_index
@@ -44,7 +44,6 @@ class MetaClusterSampler(object):
         tmp = torch.empty(self.num_nodes, dtype=torch.long)
         tmp[n_id] = torch.arange(len(n_id))
         edge_index = tmp[self.edge_index[:, e_id]]
-        res_n_id = tmp[cent_n_id]
 
         # return data
         data = copy.copy(self.data)
@@ -64,22 +63,31 @@ class MetaClusterSampler(object):
     def get_state(self):
         return self.node_emb.mean(dim=0)
 
-    def __meta_cluster__(self):
-        # policy outputs cluster center embedding
+    def __cluster__(self, action=None):
         state = self.get_state()
-        action = self.policy(state)
-        centers = action.reshape(self.num_parts, self.node_emb.shape[1])
+        # use self.policy
+        if action is None:
+            action = self.policy(state)
 
-        #TODO: assign each node to a cluster
-        dist = torch.matmul(self.node_emb, subgraph_emb)
+        centers_emb = action.reshape(self.num_parts, self.node_emb.shape[1])
+
+        # rescale centers_emb to [0, )
+        # centers_emb[centers_emb < 0] = 0
+
+        # assign each node to a cluster
+        dist = torch.mm(self.node_emb, centers_emb.T)
         prob = F.softmax(dist, dim=1)
-        cluster_id = prob.argmax(prob, dim=1)
+        cluster_id = prob.argmax(dim=1)
 
+        # induce subgraph for each cluster
         for i in range(self.num_parts):
             n_id = cluster_id[cluster_id == i]
-            self.subgraphs.append(__produce_subgraph_by_nodes__(n_id))
-        
-        return
+            # print("subgraph num nodes:", len(n_id))
+            self.subgraphs.append(self.__produce_subgraph_by_nodes__(n_id))
+    
+    def __call__(self):
+        self.reset()
+        self.__cluster__()
     
     def __len__(self):
         return self.num_parts
