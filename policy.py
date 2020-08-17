@@ -4,18 +4,11 @@ import torch.nn.functional as F
 import torch.optim as optim
 from torch.distributions import Normal
 
-LOG_SIG_MIN = -20
-LOG_SIG_MAX = 2
-EPS = 1e-5
-SCALE = 10
 CLIP_EPS = 0.1
+sigma = 1
 
 nb_episodes = 5
 nb_epoches = 5
-
-gamma = 0.98
-lambda_ = 0.95
-sigma = 1
 
 
 class Memory:

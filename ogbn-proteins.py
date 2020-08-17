@@ -117,6 +117,7 @@ def train(epoch, model, loader, node_emb):
 
     pbar.close()
 
+    # update node embedding
     node_emb = update_node_embedding(epoch_node_emb, node_emb)
 
     return total_loss / total_examples, node_emb
@@ -178,11 +179,15 @@ if __name__ == '__main__':
 
     # train and evaluation
     for epoch in range(1, 1001):
+        # use randomnode to warm start
         if epoch <= meta_start_epoch:
-            train_loader = RandomNodeSampler(data, num_parts=num_parts, shuffle=True,
-                                        num_workers=5)
+            train_loader = RandomNodeSampler(data, num_parts=num_parts, 
+                                            shuffle=True, num_workers=5)
         else:
-            train_loader = MetaClusterSampler(data, num_parts=40, policy=ppo.policy, node_emb=node_emb)
+            train_sampler = MetaClusterSampler(data, num_parts=num_parts, 
+                                            policy=ppo.policy, node_emb=node_emb)
+            train_sampler()
+            train_loader = train_sampler.subgraphs
         
         test_loader = RandomNodeSampler(data, num_parts=5, num_workers=5)
 
@@ -191,6 +196,7 @@ if __name__ == '__main__':
         print(f'Loss: {loss:.4f}, Train: {train_rocauc:.4f}, '
             f'Val: {valid_rocauc:.4f}, Test: {test_rocauc:.4f}')
 
+        # train ppo
         if epoch > ppo_start_epoch:
             env = ProteinEnv(data, model, node_emb, device)
             ppo.train_step(env)

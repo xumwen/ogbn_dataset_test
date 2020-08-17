@@ -38,11 +38,13 @@ class ProteinEnv():
         y_pred = {'train': [], 'valid': [], 'test': []}
 
         pbar = tqdm(total=len(loader))
-        pbar.set_description(f'PPO episode: {eid:04d}')
+        pbar.set_description(f'PPO episode: {eid:01d}')
 
+        cnt = 0
         for data in loader:
-            data = data.to(device)
-            out, _ = model(data.x, data.edge_index, data.edge_attr)
+            data = data.to(self.device)
+            #TODO:nodes maybe concentrated in a cluster which leads to OOM
+            out, _ = self.model(data.x, data.edge_index, data.edge_attr)
 
             for split in y_true.keys():
                 mask = data[f'{split}_mask']
